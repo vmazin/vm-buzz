@@ -590,6 +590,9 @@ pub fn resolve_command(command: &str) -> Option<PathBuf> {
 /// freeze the cheap path exists to avoid. `resolve_command` (the forced path)
 /// is the sole prober and cache populator.
 pub fn resolve_command_cached(command: &str) -> Option<PathBuf> {
+    if let Some(bundled) = resolve_workspace_command(command) {
+        return Some(bundled);
+    }
     if let Some(managed) = resolve_buzz_managed_command(command) {
         return Some(managed);
     }
