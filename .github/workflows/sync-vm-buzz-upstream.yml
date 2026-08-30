@@ -1,0 +1,67 @@
+name: Sync vm-buzz with upstream
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Stable Desktop tag (empty selects the latest)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vm-buzz-upstream-sync
+  cancel-in-progress: false
+
+env:
+  CUSTOMIZATION_BRANCH: vm-buzz/windows-integration
+  UPSTREAM_URL: https://github.com/block/buzz.git
+
+jobs:
+  sync:
+    name: Rebase and verify customizations
+    if: github.repository == 'vmazin/vm-buzz'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.CUSTOMIZATION_BRANCH }}
+          fetch-depth: 0
+
+      - name: Configure upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM_URL"
+          [[ "$(git branch --show-current)" == "$CUSTOMIZATION_BRANCH" ]]
+
+      - name: Record branch tip
+        id: before
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Rebase onto stable upstream
+        env:
+          REQUESTED_REF: ${{ inputs.upstream_ref }}
+        run: |
+          if [[ -n "$REQUESTED_REF" ]]; then
+            scripts/update-upstream.sh --ref "$REQUESTED_REF"
+          else
+            scripts/update-upstream.sh
+          fi
+
+      - name: Update customization branch
+        env:
+          PREVIOUS_SHA: ${{ steps.before.outputs.sha }}
+        run: |
+          if [[ "$(git rev-parse HEAD)" == "$PREVIOUS_SHA" ]]; then
+            echo "Customization branch is already current"
+            exit 0
+          fi
+          git push \
+            --force-with-lease="refs/heads/${CUSTOMIZATION_BRANCH}:${PREVIOUS_SHA}" \
+            origin "HEAD:refs/heads/${CUSTOMIZATION_BRANCH}"
