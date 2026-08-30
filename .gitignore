@@ -70,5 +70,9 @@ identity.key
 # mesh-llm build cache
 .cache/
 
+# vm-buzz Windows build mirror marker and standalone integration builds
+.vm-buzz-build-tree
+integrations/*/target/
+
 # Helm dependency tarballs — regenerable from Chart.lock via `helm dependency build`
 deploy/charts/*/charts/*.tgz
