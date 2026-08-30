@@ -286,7 +286,40 @@ pub struct DesktopMeshRuntime {
     start_request: StartMeshNodeRequest,
 }
 
+#[cfg(target_os = "windows")]
+async fn prepare_windows_vulkan_runtime() -> anyhow::Result<()> {
+    use mesh_llm_host_runtime::sdk::native_runtime::{
+        current_skippy_abi_version, install_native_runtime, NativeRuntimeInstallOptions,
+        RuntimeSelection,
+    };
+
+    const VULKAN_RUNTIME_ID: &str = "meshllm-native-runtime-windows-x86_64-vulkan";
+
+    let outcome = install_native_runtime(NativeRuntimeInstallOptions {
+        skippy_abi_version: Some(current_skippy_abi_version()),
+        selection: RuntimeSelection::Id(VULKAN_RUNTIME_ID.to_string()),
+        ..Default::default()
+    })
+    .await
+    .map_err(|error| anyhow::anyhow!("failed to install Vulkan runtime: {error:#}"))?;
+
+    let runtime_dir = outcome.runtime.path;
+    let runtime_lib_dir = runtime_dir.join("lib");
+    let inherited_path = std::env::var_os("PATH").unwrap_or_default();
+    let augmented_path = std::env::join_paths(
+        std::iter::once(runtime_lib_dir).chain(std::env::split_paths(&inherited_path)),
+    )
+    .map_err(|error| anyhow::anyhow!("failed to configure Vulkan DLL path: {error}"))?;
+
+    std::env::set_var("PATH", augmented_path);
+    std::env::set_var("MESH_LLM_NATIVE_RUNTIME_BUNDLE_DIR", runtime_dir);
+    Ok(())
+}
+
 async fn initialize_mesh_native_runtime() -> anyhow::Result<()> {
+    #[cfg(target_os = "windows")]
+    prepare_windows_vulkan_runtime().await?;
+
     // The dynamic host runtime installs the recommended signed runtime on first
     // use when no compatible version is cached. Keep that SDK-owned path intact
     // so release builds work on clean machines without bundling llama.cpp or
@@ -308,7 +341,7 @@ async fn initialize_mesh_native_runtime() -> anyhow::Result<()> {
 /// `DEFAULT_WORKER_STACK_SIZE`), as does mesh-console. `lib.rs` installs a
 /// runtime with this stack size via `tauri::async_runtime::set` before the
 /// app starts, so every command future gets the same headroom.
-pub const MESH_WORKER_STACK_SIZE: usize = 8 * 1024 * 1024;
+pub const MESH_WORKER_STACK_SIZE: usize = 32 * 1024 * 1024;
 
 /// Pre-download the model (with byte progress through the output sink)
 /// before the node starts. Without this the download happens *inside*
