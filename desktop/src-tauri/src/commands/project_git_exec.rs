@@ -178,6 +178,14 @@ fn configure_git_auth(command: &mut Command, auth: &GitAuthConfig, needs_credent
             credential_helper_config_value(cred_helper),
         ));
         entries.push(("credential.useHttpPath", "true".to_string()));
+        #[cfg(windows)]
+        {
+            // Private relay CAs commonly omit a reachable CRL/OCSP endpoint.
+            // Select Schannel explicitly so this override is honored; the
+            // certificate chain is still validated against Windows roots.
+            entries.push(("http.sslBackend", "schannel".to_string()));
+            entries.push(("http.schannelCheckRevoke", "false".to_string()));
+        }
     }
     apply_git_config(command, &entries);
 }
