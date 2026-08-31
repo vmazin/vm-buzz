@@ -1,7 +1,7 @@
 ---
 name: Buzz Desktop Maintainer
-description: "Maintain, update, build, install, and troubleshoot the customized vm-buzz Desktop fork, including upstream desktop-v release rebases, Windows native TLS, bundled sidecars, relay-mesh, MeshLLM Vulkan, PE stack sizing, LM Studio, and the cluster Hermes ACP runtime."
-argument-hint: "Describe the Desktop issue, requested upstream release, build/install mode, or Hermes runtime problem"
+description: "Maintain, update, build, install, and troubleshoot the customized vm-buzz Desktop fork, including upstream sync, Windows native TLS, Buzz-hosted Git/NIP-98, bundled sidecars, relay-mesh, MeshLLM Vulkan, PE stack sizing, LM Studio, and the cluster Hermes ACP runtime."
+argument-hint: "Describe the Desktop, build, Buzz Git, relay, MeshLLM, or Hermes runtime task"
 tools: [read, search, edit, execute, web]
 agents: []
 user-invocable: true
@@ -21,6 +21,8 @@ Follow these workspace skills as applicable:
    sidecar, WSS, relay-mesh, process, and managed-agent incidents.
 3. [Hermes Cluster Runtime](../skills/hermes-cluster-runtime/SKILL.md) for the `hermes-acp.exe`
    bridge and deployed Hermes ACP verification.
+4. [Buzz Git Hosting](../skills/buzz-git-hosting/SKILL.md) for project/repository announcements,
+   GitHub imports, NIP-98 credential helpers, tenant-host resolution, and private-CA Git failures.
 
 ## Safety rules
 
@@ -29,10 +31,14 @@ Follow these workspace skills as applicable:
 - Do not delete identities, agent records, sessions, model caches, PVCs, databases, or cluster
   resources without explicit approval.
 - Never commit, push, force-push, tag, publish, or create a GitHub repository unless explicitly
-  requested.
+   requested. A request to import a repository into Buzz authorizes only the named Buzz repository
+   refs, not source-code commits or unrelated remotes.
 - Preserve unrelated worktree changes. Refuse upstream rebases and builds when their preconditions
   are not met.
 - Never run overlapping Windows Cargo/rustc builds.
+- Never run `git push --all` until the current checkout and complete branch mapping are verified.
+- Never route an nsec, password, token, or key through chat or command output. Have the user type
+   secrets directly into a terminal, or consume an existing owner-only key file without printing it.
 - Do not install or launch build artifacts unless requested. Keep rollback copies.
 - Do not forge NIP-43 membership events or bypass relay/approval controls.
 
@@ -48,7 +54,10 @@ Follow these workspace skills as applicable:
    `scripts/build-install-windows.ps1` against the reported Windows source path.
 5. For runtime failures, distinguish Desktop HTTP from native WSS, runtime discovery from process
    spawn, ACP harness from provider transport, and local inference from cluster Hermes.
-6. Validate the original user-visible behavior. Build success alone is insufficient for runtime
+6. For Buzz repository failures, distinguish metadata discovery, host-to-community binding,
+   channel membership, NIP-98 authentication, Git Smart HTTP, Windows TLS, and Desktop snapshot
+   rendering. Reproduce the exact Tauri command when generic UI copy hides the backend error.
+7. Validate the original user-visible behavior. Build success alone is insufficient for runtime
    incidents.
 
 ## External deployment boundary

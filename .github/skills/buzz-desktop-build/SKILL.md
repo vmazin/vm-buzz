@@ -38,6 +38,29 @@ user-invocable: true
    `editbin /STACK:33554432`, and verify the PE header with `dumpbin`.
 4. Require hashes for Desktop, all external binaries, and `hermes-acp.exe`.
 
+### WSL sync recovery
+
+`rsync` into `/mnt/c` can stall in `p9_client_rpc`. Treat the sync as incomplete until the
+`.vm-buzz-build-tree` marker exists and the destination contains the current patched source.
+
+1. Inspect the sync shell/rsync process group, elapsed time, process state, and `wchan`. A worker
+   blocked in `p9_client_rpc` for many minutes with no marker is stalled, not merely slow.
+2. Terminate only that sync process group. Never kill unrelated Cargo/rustc or Desktop processes.
+3. Preserve staged and unstaged source exactly. Create one temporary tar archive from the working
+   tree (not `git archive`), excluding `.git`, every `target`, `node_modules`, `dist`, and `.cache`.
+4. Extract with Windows-native `tar.exe` into a fresh, explicitly named path under
+   `%LOCALAPPDATA%\vm-buzz\build\`. Do not reuse or delete an unmarked destination.
+5. Verify required Cargo manifests, build helper, patched source strings, and invariant verifier from
+   Windows-native APIs; then create the marker and delete the temporary archive.
+
+### Long serial builds
+
+The build helper sets `CARGO_BUILD_JOBS=1`; first builds can take a long time, especially
+`aws-lc-sys`. Lack of terminal output is not evidence of a hang. Check the one Cargo process tree:
+an active `cl.exe` or `rustc.exe` compiling changing crates is progress. Do not start a second build.
+Invoke the helper from a Visual Studio developer shell when `editbin.exe`/`dumpbin.exe` are not on
+the default PATH.
+
 ## Install
 
 Use `-Install` only when installation is explicitly requested, and `-Launch` only with `-Install`.
@@ -46,3 +69,7 @@ directory, preserves pre-patched backups, and attempts complete rollback on any 
 
 After install, validate a normal Desktop launch, native WSS, runtime discovery, and any user-requested
 provider/runtime flow. Do not claim success from compilation alone.
+
+For Buzz repository incidents, invoke `get_project_repo_snapshot` after launch and require the
+expected branch latest commit plus nonzero files. Preserve and report pre-install backups and prove
+the installed executable hash equals the verified build artifact.
