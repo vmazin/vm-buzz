@@ -37,6 +37,10 @@ require_text "desktop/src-tauri/src/mesh_llm/mod.rs" \
   'MESH_LLM_NATIVE_RUNTIME_BUNDLE_DIR' "Vulkan bundle pinning"
 require_text "desktop/src-tauri/src/mesh_llm/mod.rs" \
   'std::env::set_var("PATH", augmented_path)' "Vulkan DLL search path"
+require_text "desktop/src-tauri/src/commands/project_git_exec.rs" \
+  '("http.sslBackend", "schannel".to_string())' "Windows Git Schannel selection"
+require_text "desktop/src-tauri/src/commands/project_git_exec.rs" \
+  '("http.schannelCheckRevoke", "false".to_string())' "private-CA Git revocation handling"
 require_text "integrations/hermes-acp-cluster-bridge/src/main.rs" \
   'HERMES_ACP_SKIP_CONFIGURED_MCP=1' "Hermes cluster ACP bridge"
 
