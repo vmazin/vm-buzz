@@ -177,4 +177,7 @@ Report:
 - Exact imported branch count and commit parity.
 - Buzz symbolic HEAD/default branch.
 - Desktop snapshot latest commit, file/commit/contributor counts.
+- Installed Desktop path, version, hash equality with the build artifact, closed debug port, and
+   preserved rollback backups. A successful snapshot from a different installation directory does
+   not validate the shortcut the user actually runs.
 - Worktree status for both source repositories and any unrelated changes left untouched.
