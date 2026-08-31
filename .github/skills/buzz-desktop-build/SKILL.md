@@ -67,6 +67,26 @@ Use `-Install` only when installation is explicitly requested, and `-Launch` onl
 The helper stages and verifies artifacts, stops only processes executing from the target install
 directory, preserves pre-patched backups, and attempts complete rollback on any replacement error.
 
+Before installation, record the actual running executable path and the path targeted by the user's
+shortcut. `%LOCALAPPDATA%` can resolve to `C:` while an existing installation lives on `D:`. In that
+case, the helper's default installs a correct build that the user never launches. Pass the active
+directory explicitly:
+
+```powershell
+scripts/build-install-windows.ps1 \
+   -SourceDir 'C:\path\to\windows-native-source' \
+   -InstallDir 'D:\Users\name\AppData\Local\Buzz' \
+   -Install -Launch
+```
+
+After replacement, require all of these:
+
+- The installed Desktop hash equals the verified build artifact hash.
+- The running process path is inside the requested `InstallDir` and reports the expected version.
+- Every external binary and `hermes-acp.exe` hash matches the build output.
+- One-time `*.pre-vm-buzz-backup` rollback copies exist for replaced artifacts.
+- Any temporary WebView debugging port used during diagnosis is closed before the normal launch.
+
 After install, validate a normal Desktop launch, native WSS, runtime discovery, and any user-requested
 provider/runtime flow. Do not claim success from compilation alone.
 
