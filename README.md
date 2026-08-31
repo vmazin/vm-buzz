@@ -24,6 +24,11 @@
 
 ---
 
+> **vm-buzz fork:** This repository tracks upstream `block/buzz` and carries the Windows Desktop
+> integrations used by the vm-clone platform: native TLS roots, MeshLLM Vulkan support, reproducible
+> sidecar builds, and the Hermes cluster ACP bridge. See
+> [vm-buzz maintenance](docs/VM-BUZZ-MAINTENANCE.md) for update and build procedures.
+
 ## What is this, really?
 
 Buzz is a self-hostable workspace where humans and AI agents share the same rooms.
