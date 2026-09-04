@@ -95,7 +95,13 @@ pub(super) fn preset_catalog_entry(
         auth_status: AuthStatus::NotApplicable,
         login_hint: None,
         source: HarnessSource::Preset,
-        definition_env: Default::default(),
+        definition_env: if def.id == "hermes" {
+            [("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string())]
+                .into_iter()
+                .collect()
+        } else {
+            Default::default()
+        },
         // Derived from the static preset command (`def.command`). This ensures
         // unavailable entries (command: null in JSON, None here) still carry
         // the cap — the harness cap is command-keyed, not availability-gated.
@@ -464,6 +470,29 @@ mod tests {
             not_installed.install_hint,
             "Install Pi with `npm install -g @earendil-works/pi-coding-agent`, then run `pi` to configure its model provider. Requires Node.js 22 or newer. Install the Pi ACP adapter with `npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#86b201e'`. Make sure `buzz-pi-acp` is on PATH, then restart Buzz."
         );
+    }
+
+    #[test]
+    fn hermes_preset_publishes_acp_text_output() {
+        let hermes = PRESET_HARNESSES
+            .iter()
+            .find(|preset| preset.id == "hermes")
+            .expect("Hermes preset should be present");
+        let entry = preset_catalog_entry(hermes, |command| {
+            (command == "hermes-acp").then(|| PathBuf::from("/usr/local/bin/hermes-acp"))
+        });
+
+        assert_eq!(
+            entry.definition_env.get("BUZZ_ACP_PUBLISH_OUTPUT").map(String::as_str),
+            Some("true")
+        );
+
+        let devin = PRESET_HARNESSES
+            .iter()
+            .find(|preset| preset.id == "devin")
+            .expect("Devin preset should be present");
+        let devin_entry = preset_catalog_entry(devin, |_| None);
+        assert!(!devin_entry.definition_env.contains_key("BUZZ_ACP_PUBLISH_OUTPUT"));
     }
 
     #[test]

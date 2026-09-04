@@ -3,6 +3,8 @@ use std::process::{Command, Stdio};
 
 const DEFAULT_WSL_DISTRO: &str = "Ubuntu-24.04";
 const DEFAULT_KUBECTL: &str = "/snap/bin/kubectl";
+const WSL_PATH: &str = "/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+const DEFAULT_KUBECONFIG: &str = ".kube/config.k3s";
 const DEFAULT_NAMESPACE: &str = "hermes";
 const DEFAULT_DEPLOYMENT: &str = "hermes";
 const DEFAULT_CONTAINER: &str = "hermes";
@@ -12,6 +14,7 @@ const DEFAULT_ACP_PATH: &str = "/opt/hermes/.venv/bin/hermes-acp";
 struct BridgeConfig {
     wsl_distro: String,
     kubectl: String,
+    kubeconfig: String,
     namespace: String,
     deployment: String,
     container: String,
@@ -23,6 +26,7 @@ impl BridgeConfig {
         Self {
             wsl_distro: value("VM_BUZZ_WSL_DISTRO", DEFAULT_WSL_DISTRO),
             kubectl: value("VM_BUZZ_KUBECTL", DEFAULT_KUBECTL),
+            kubeconfig: value("VM_BUZZ_KUBECONFIG", DEFAULT_KUBECONFIG),
             namespace: value("VM_BUZZ_HERMES_NAMESPACE", DEFAULT_NAMESPACE),
             deployment: value("VM_BUZZ_HERMES_DEPLOYMENT", DEFAULT_DEPLOYMENT),
             container: value("VM_BUZZ_HERMES_CONTAINER", DEFAULT_CONTAINER),
@@ -34,7 +38,12 @@ impl BridgeConfig {
         vec![
             "-d".into(),
             self.wsl_distro.clone(),
+            "--cd".into(),
+            "~".into(),
             "--".into(),
+            "/usr/bin/env".into(),
+            format!("PATH={WSL_PATH}"),
+            format!("KUBECONFIG={}", self.kubeconfig),
             self.kubectl.clone(),
             "-n".into(),
             self.namespace.clone(),
@@ -85,6 +94,7 @@ mod tests {
         let config = BridgeConfig {
             wsl_distro: DEFAULT_WSL_DISTRO.into(),
             kubectl: DEFAULT_KUBECTL.into(),
+            kubeconfig: DEFAULT_KUBECONFIG.into(),
             namespace: DEFAULT_NAMESPACE.into(),
             deployment: DEFAULT_DEPLOYMENT.into(),
             container: DEFAULT_CONTAINER.into(),
@@ -96,7 +106,12 @@ mod tests {
             vec![
                 "-d",
                 "Ubuntu-24.04",
+                "--cd",
+                "~",
                 "--",
+                "/usr/bin/env",
+                "PATH=/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "KUBECONFIG=.kube/config.k3s",
                 "/snap/bin/kubectl",
                 "-n",
                 "hermes",
