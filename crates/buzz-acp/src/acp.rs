@@ -214,7 +214,13 @@ pub struct AcpClient {
     standard_usage: StandardUsageTracker,
     /// Known adapter identity for prompt-response usage mapping.
     standard_adapter: Option<StandardAdapterKind>,
+    /// Text emitted through ACP `agent_message_chunk` updates during the
+    /// current turn. Used only by the opt-in harness output publisher.
+    agent_message: String,
+    agent_message_truncated: bool,
 }
+
+const MAX_CAPTURED_AGENT_MESSAGE_BYTES: usize = 60 * 1024;
 
 /// Recursively merge `overlay` into `base`, with `overlay` winning on scalar/shape
 /// collisions.  When both sides have an object for the same key, the merge recurses so
@@ -563,6 +569,8 @@ impl AcpClient {
             goose_usage: UsageTracker::default(),
             standard_usage: StandardUsageTracker::default(),
             standard_adapter,
+            agent_message: String::new(),
+            agent_message_truncated: false,
         })
     }
 
@@ -781,6 +789,8 @@ impl AcpClient {
         idle_timeout: std::time::Duration,
         max_duration: std::time::Duration,
     ) -> Result<StopReason, AcpError> {
+        self.agent_message.clear();
+        self.agent_message_truncated = false;
         let params = build_prompt_params(session_id, prompt_blocks);
         let hard_deadline = tokio::time::Instant::now() + max_duration;
         self.current_hard_deadline = Some(hard_deadline);
@@ -888,6 +898,16 @@ impl AcpClient {
         let goose_usage = self.goose_usage.take();
         let standard_usage = self.standard_usage.take();
         goose_usage.or(standard_usage)
+    }
+
+    pub(crate) fn take_agent_message(&mut self) -> Option<String> {
+        let mut content = std::mem::take(&mut self.agent_message);
+        let truncated = std::mem::take(&mut self.agent_message_truncated);
+        if truncated {
+            content.push_str("\n\n[Response truncated by Buzz.]");
+        }
+        let trimmed = content.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
     }
 
     /// Notify the usage tracker that buzz-acp just spawned a new session.
@@ -1756,6 +1776,18 @@ impl AcpClient {
             "agent_message_chunk" => {
                 if let Some(text) = update["content"]["text"].as_str() {
                     tracing::info!(target: "acp::stream", "{text}");
+                    let remaining =
+                        MAX_CAPTURED_AGENT_MESSAGE_BYTES.saturating_sub(self.agent_message.len());
+                    if text.len() <= remaining {
+                        self.agent_message.push_str(text);
+                    } else {
+                        let mut end = remaining.min(text.len());
+                        while !text.is_char_boundary(end) {
+                            end -= 1;
+                        }
+                        self.agent_message.push_str(&text[..end]);
+                        self.agent_message_truncated = true;
+                    }
                 }
                 false
             }
@@ -3811,6 +3843,31 @@ mod tests {
             Some("run-stable"),
             "non-string/non-null activeRunId must leave state untouched"
         );
+    }
+
+    #[tokio::test]
+    async fn captures_agent_message_chunks_for_opt_in_publication() {
+        let mut client = spawn_inert_client().await;
+        for text in ["Weather is ", "sunny."] {
+            let update = serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "session/update",
+                "params": {
+                    "sessionId": "test-session",
+                    "update": {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": { "type": "text", "text": text },
+                    },
+                },
+            });
+            let _ = client.handle_session_update(&update);
+        }
+
+        assert_eq!(
+            client.take_agent_message().as_deref(),
+            Some("Weather is sunny.")
+        );
+        assert!(client.take_agent_message().is_none());
     }
 
     // ── Goose-native steer arm tests ──────────────────────────────────────

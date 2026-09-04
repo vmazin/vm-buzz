@@ -43,5 +43,13 @@ require_text "desktop/src-tauri/src/commands/project_git_exec.rs" \
   '("http.schannelCheckRevoke", "false".to_string())' "private-CA Git revocation handling"
 require_text "integrations/hermes-acp-cluster-bridge/src/main.rs" \
   'HERMES_ACP_SKIP_CONFIGURED_MCP=1' "Hermes cluster ACP bridge"
+require_text "integrations/hermes-acp-cluster-bridge/src/main.rs" \
+  'PATH=/snap/bin:' "Hermes WSL credential-plugin path"
+require_text "integrations/hermes-acp-cluster-bridge/src/main.rs" \
+  'KUBECONFIG={}' "Hermes local kubeconfig pin"
+require_text "desktop/src-tauri/src/managed_agents/discovery/presets.rs" \
+  'BUZZ_ACP_PUBLISH_OUTPUT' "Hermes ACP output publication"
+require_text "crates/buzz-acp/src/pool.rs" \
+  'published ACP output reply' "ACP output relay handoff"
 
 echo "vm-buzz customization invariants verified"
