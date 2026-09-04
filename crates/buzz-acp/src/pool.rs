@@ -641,6 +641,9 @@ pub struct PromptContext {
     /// the desktop keys per (agent, relay) pair, e.g. `session_config_captured`,
     /// mirroring the `managed_agent_runtime_lifecycle` frames.
     pub relay_url: String,
+    /// Publish ACP text output as a Buzz reply for runtimes that cannot run
+    /// the Buzz CLI in their execution environment.
+    pub publish_acp_output: bool,
 }
 
 impl AgentPool {
@@ -2638,6 +2641,32 @@ pub async fn run_prompt_task(
         Ok(stop_reason) => {
             log_stop_reason(&source, &stop_reason);
 
+            if ctx.publish_acp_output && matches!(source, PromptSource::Channel(_)) {
+                if let (Some(content), Some(output_batch)) =
+                    (agent.acp.take_agent_message(), batch.as_ref())
+                {
+                    if let Err(error) =
+                        post_acp_output(&ctx.rest_client, output_batch, &content).await
+                    {
+                        tracing::error!(
+                            channel = %output_batch.channel_id,
+                            "ACP output publish failed: {error}"
+                        );
+                        send_prompt_result(
+                            &result_tx,
+                            &turn_id,
+                            agent,
+                            source,
+                            PromptOutcome::Error(AcpError::Protocol(format!(
+                                "ACP output publish failed: {error}"
+                            ))),
+                            requeue_batch_if_queue(&ctx, batch),
+                        );
+                        return;
+                    }
+                }
+            }
+
             if let PromptSource::Channel(cid) = &source {
                 let standing_sent = !agent.has_system_prompt_support();
                 record_channel_delivery_success(
@@ -4581,6 +4610,46 @@ pub(crate) async fn post_failure_notice(
         Ok(Ok(_)) => {}
         Ok(Err(e)) => tracing::warn!(channel = %channel_id, "failure notice failed: {e}"),
         Err(_) => tracing::warn!(channel = %channel_id, "failure notice timed out"),
+    }
+}
+
+async fn post_acp_output(
+    rest: &crate::relay::RestClient,
+    batch: &FlushBatch,
+    content: &str,
+) -> Result<(), String> {
+    let triggering_event = batch
+        .events
+        .last()
+        .ok_or_else(|| "triggering batch has no events".to_string())?;
+    let tags = crate::queue::parse_thread_tags(&triggering_event.event);
+    let root_id = tags
+        .root_event_id
+        .as_deref()
+        .and_then(|root| nostr::EventId::from_hex(root).ok())
+        .unwrap_or(triggering_event.event.id);
+    let thread_ref = buzz_sdk::ThreadRef {
+        root_event_id: root_id,
+        parent_event_id: root_id,
+    };
+    let event = buzz_sdk::build_message(
+        batch.channel_id,
+        content,
+        Some(&thread_ref),
+        &[],
+        false,
+        &[],
+    )
+    .map_err(|error| format!("build reply: {error}"))?
+    .sign_with_keys(&rest.keys)
+    .map_err(|error| format!("sign reply: {error}"))?;
+    match tokio::time::timeout(Duration::from_secs(5), rest.submit_event(&event)).await {
+        Ok(Ok(_)) => {
+            tracing::info!(channel = %batch.channel_id, event_id = %event.id, "published ACP output reply");
+            Ok(())
+        }
+        Ok(Err(error)) => Err(error.to_string()),
+        Err(_) => Err("relay publish timed out".to_string()),
     }
 }
 
@@ -7953,6 +8022,7 @@ printf '%s\n' '{{"jsonrpc":"2.0","id":0,"result":{{"stopReason":"end_turn"}}}}'"
             memory_enabled: false,
             harness_name: "goose".to_string(),
             relay_url: "ws://127.0.0.1:3000".to_string(),
+            publish_acp_output: false,
         }
     }
 

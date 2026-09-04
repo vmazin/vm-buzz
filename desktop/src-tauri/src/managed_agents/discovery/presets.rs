@@ -81,7 +81,13 @@ pub(super) fn preset_catalog_entry(
         auth_status: AuthStatus::NotApplicable,
         login_hint: None,
         source: HarnessSource::Preset,
-        definition_env: Default::default(),
+        definition_env: if def.id == "hermes" {
+            [("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string())]
+                .into_iter()
+                .collect()
+        } else {
+            Default::default()
+        },
         // Derived from the static preset command (`def.command`). This ensures
         // unavailable entries (command: null in JSON, None here) still carry
         // the cap — the harness cap is command-keyed, not availability-gated.
@@ -345,6 +351,29 @@ mod tests {
         assert_eq!(entry.default_args, vec!["acp"]);
         assert_eq!(entry.install_instructions_url, "https://docs.devin.ai/cli");
         assert_eq!(entry.source, HarnessSource::Preset);
+    }
+
+    #[test]
+    fn hermes_preset_publishes_acp_text_output() {
+        let hermes = PRESET_HARNESSES
+            .iter()
+            .find(|preset| preset.id == "hermes")
+            .expect("Hermes preset should be present");
+        let entry = preset_catalog_entry(hermes, |command| {
+            (command == "hermes-acp").then(|| PathBuf::from("/usr/local/bin/hermes-acp"))
+        });
+
+        assert_eq!(
+            entry.definition_env.get("BUZZ_ACP_PUBLISH_OUTPUT").map(String::as_str),
+            Some("true")
+        );
+
+        let devin = PRESET_HARNESSES
+            .iter()
+            .find(|preset| preset.id == "devin")
+            .expect("Devin preset should be present");
+        let devin_entry = preset_catalog_entry(devin, |_| None);
+        assert!(!devin_entry.definition_env.contains_key("BUZZ_ACP_PUBLISH_OUTPUT"));
     }
 
     #[test]

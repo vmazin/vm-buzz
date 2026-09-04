@@ -2221,6 +2221,8 @@ async fn tokio_main() -> Result<()> {
         memory_enabled: config.memory_enabled,
         harness_name: crate::config::normalize_agent_command_identity(&config.agent_command),
         relay_url: config.relay_url.clone(),
+        publish_acp_output: std::env::var("BUZZ_ACP_PUBLISH_OUTPUT")
+            .is_ok_and(|value| matches!(value.trim(), "1" | "true" | "yes" | "on")),
     });
 
     if !config.memory_enabled {
