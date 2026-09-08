@@ -5160,6 +5160,7 @@ async fn post_acp_output(
         &[],
         false,
         &[],
+        &[],
     )
     .map_err(|error| format!("build reply: {error}"))?
     .sign_with_keys(&rest.keys)
