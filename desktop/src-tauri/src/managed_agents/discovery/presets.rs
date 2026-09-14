@@ -483,7 +483,10 @@ mod tests {
         });
 
         assert_eq!(
-            entry.definition_env.get("BUZZ_ACP_PUBLISH_OUTPUT").map(String::as_str),
+            entry
+                .definition_env
+                .get("BUZZ_ACP_PUBLISH_OUTPUT")
+                .map(String::as_str),
             Some("true")
         );
 
@@ -492,7 +495,9 @@ mod tests {
             .find(|preset| preset.id == "devin")
             .expect("Devin preset should be present");
         let devin_entry = preset_catalog_entry(devin, |_| None);
-        assert!(!devin_entry.definition_env.contains_key("BUZZ_ACP_PUBLISH_OUTPUT"));
+        assert!(!devin_entry
+            .definition_env
+            .contains_key("BUZZ_ACP_PUBLISH_OUTPUT"));
     }
 
     #[test]
