@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -20,6 +21,16 @@ pub(super) struct PresetHarness {
     /// State-specific setup guidance for the wrapped vendor CLI.
     underlying_cli_install_hint: Option<&'static str>,
     underlying_cli_install_instructions_url: Option<&'static str>,
+}
+
+fn preset_definition_env(def: &PresetHarness) -> BTreeMap<String, String> {
+    if def.id == "hermes" {
+        [("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string())]
+            .into_iter()
+            .collect()
+    } else {
+        BTreeMap::new()
+    }
 }
 
 /// Build one preset catalog entry through an injectable command resolver.
@@ -95,13 +106,7 @@ pub(super) fn preset_catalog_entry(
         auth_status: AuthStatus::NotApplicable,
         login_hint: None,
         source: HarnessSource::Preset,
-        definition_env: if def.id == "hermes" {
-            [("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string())]
-                .into_iter()
-                .collect()
-        } else {
-            Default::default()
-        },
+        definition_env: preset_definition_env(def),
         // Derived from the static preset command (`def.command`). This ensures
         // unavailable entries (command: null in JSON, None here) still carry
         // the cap — the harness cap is command-keyed, not availability-gated.
@@ -244,7 +249,7 @@ pub(crate) fn preset_harness_definitions(
                 label: preset.label.to_string(),
                 command: preset.command.to_string(),
                 args: preset.args.iter().map(|arg| arg.to_string()).collect(),
-                env: Default::default(),
+                env: preset_definition_env(preset),
                 install_instructions_url: preset.install_instructions_url.to_string(),
                 install_hint: preset.install_hint.to_string(),
             },
@@ -333,6 +338,9 @@ pub(crate) fn canonical_harness_command(input: &str) -> Option<String> {
 mod tests {
     use std::path::PathBuf;
 
+    use crate::managed_agents::custom_harnesses::{
+        lookup_loaded_harness_by_id, registry_test_lock, warm_harness_registry_from_dir,
+    };
     use crate::managed_agents::{AcpAvailabilityStatus, AuthStatus, HarnessSource};
 
     use super::{preset_catalog_entry, PresetHarness, PRESET_HARNESSES};
@@ -474,6 +482,7 @@ mod tests {
 
     #[test]
     fn hermes_preset_publishes_acp_text_output() {
+        let _registry_guard = registry_test_lock();
         let hermes = PRESET_HARNESSES
             .iter()
             .find(|preset| preset.id == "hermes")
@@ -485,6 +494,17 @@ mod tests {
         assert_eq!(
             entry
                 .definition_env
+                .get("BUZZ_ACP_PUBLISH_OUTPUT")
+                .map(String::as_str),
+            Some("true")
+        );
+
+        warm_harness_registry_from_dir(None);
+        let spawn_definition = lookup_loaded_harness_by_id("hermes")
+            .expect("Hermes preset should be available to production spawn");
+        assert_eq!(
+            spawn_definition
+                .env
                 .get("BUZZ_ACP_PUBLISH_OUTPUT")
                 .map(String::as_str),
             Some("true")
