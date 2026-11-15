@@ -169,13 +169,22 @@ call "$($Corepack.Source)" pnpm %*
         }
 
         $OwnedNames = @($artifacts.Keys)
-        Get-CimInstance Win32_Process |
+        $OwnedProcesses = @(Get-CimInstance Win32_Process |
             Where-Object {
                 $_.ExecutablePath -and
                 $_.Name -in $OwnedNames -and
                 ([IO.Path]::GetDirectoryName($_.ExecutablePath).TrimEnd("\") -ieq $InstallDir.TrimEnd("\"))
-            } |
-            ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+            })
+        foreach ($ownedProcess in $OwnedProcesses) {
+            Stop-Process -Id $ownedProcess.ProcessId -Force
+            try {
+                Wait-Process -Id $ownedProcess.ProcessId -Timeout 15 -ErrorAction Stop
+            } catch {
+                if (Get-Process -Id $ownedProcess.ProcessId -ErrorAction SilentlyContinue) {
+                    throw "Timed out waiting for $($ownedProcess.Name) process $($ownedProcess.ProcessId) to exit"
+                }
+            }
+        }
 
         try {
             foreach ($name in $artifacts.Keys) {

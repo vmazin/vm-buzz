@@ -73,6 +73,7 @@ fn is_subcommand(name: &str) -> bool {
 
 /// Timeout for lightweight helper subcommands (spawn + initialize + model/method probes).
 const MODELS_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_MODELS_TIMEOUT_SECONDS: u64 = 120;
 
 /// Timeout for `buzz-acp authenticate`. Browser-based vendor auth can require
 /// human interaction, so it must not share the short probe timeout.
@@ -92,6 +93,44 @@ fn current_working_directory() -> Result<String> {
         cwd.display()
     );
     Ok(cwd.to_string_lossy().into_owned())
+}
+
+fn models_working_directory_from(configured: Option<std::ffi::OsString>) -> Result<String> {
+    let Some(cwd) = configured.filter(|value| !value.is_empty()) else {
+        return current_working_directory();
+    };
+    let cwd = cwd
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("BUZZ_ACP_MODELS_CWD must be valid UTF-8"))?;
+    ensure!(
+        cwd.starts_with('/') || std::path::Path::new(&cwd).is_absolute(),
+        "BUZZ_ACP_MODELS_CWD must be an absolute path"
+    );
+    Ok(cwd)
+}
+
+fn models_working_directory() -> Result<String> {
+    models_working_directory_from(std::env::var_os("BUZZ_ACP_MODELS_CWD"))
+}
+
+fn models_timeout_from(configured: Option<std::ffi::OsString>) -> Result<Duration> {
+    let Some(seconds) = configured.filter(|value| !value.is_empty()) else {
+        return Ok(MODELS_TIMEOUT);
+    };
+    let seconds = seconds
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("BUZZ_ACP_MODELS_TIMEOUT_SECONDS must be valid UTF-8"))?
+        .parse::<u64>()
+        .context("BUZZ_ACP_MODELS_TIMEOUT_SECONDS must be a positive integer")?;
+    ensure!(
+        (1..=MAX_MODELS_TIMEOUT_SECONDS).contains(&seconds),
+        "BUZZ_ACP_MODELS_TIMEOUT_SECONDS must be between 1 and {MAX_MODELS_TIMEOUT_SECONDS}"
+    );
+    Ok(Duration::from_secs(seconds))
+}
+
+fn models_timeout() -> Result<Duration> {
+    models_timeout_from(std::env::var_os("BUZZ_ACP_MODELS_TIMEOUT_SECONDS"))
 }
 
 /// Publish a kind:20001 presence update event via the WebSocket connection.
@@ -6309,7 +6348,8 @@ async fn run_models(args: ModelsArgs) -> Result<()> {
     use acp::{extract_model_config_options, extract_model_state};
 
     let agent_args = config::normalize_agent_args(&args.agent.agent_command, args.agent.agent_args);
-    let cwd = current_working_directory()?;
+    let cwd = models_working_directory()?;
+    let timeout = models_timeout()?;
 
     // Spawn outside the timeout so we always own the child for cleanup.
     // `models` subcommand doesn't use persona packs — no extra env, no codex config.
@@ -6324,7 +6364,7 @@ async fn run_models(args: ModelsArgs) -> Result<()> {
 
     // Initialize + session/new under a timeout. Client is owned above,
     // so shutdown() runs on all paths (success, error, timeout).
-    let protocol_result = tokio::time::timeout(MODELS_TIMEOUT, async {
+    let protocol_result = tokio::time::timeout(timeout, async {
         let init = client.initialize().await?;
         let session = client.session_new_full(&cwd, vec![], None, None).await?;
         Ok::<_, acp::AcpError>((init, session))
@@ -6340,7 +6380,7 @@ async fn run_models(args: ModelsArgs) -> Result<()> {
         }
         Err(_) => {
             client.shutdown().await;
-            eprintln!("error: agent timed out ({MODELS_TIMEOUT:?})");
+            eprintln!("error: agent timed out ({timeout:?})");
             std::process::exit(1);
         }
     };
@@ -6440,6 +6480,46 @@ async fn run_models(args: ModelsArgs) -> Result<()> {
 
     client.shutdown().await;
     Ok(())
+}
+
+#[cfg(test)]
+mod models_working_directory_tests {
+    use std::time::Duration;
+
+    use super::{
+        models_timeout_from, models_working_directory_from, MAX_MODELS_TIMEOUT_SECONDS,
+        MODELS_TIMEOUT,
+    };
+
+    #[test]
+    fn accepts_remote_unix_working_directory() {
+        assert_eq!(
+            models_working_directory_from(Some("/tmp".into()))
+                .expect("remote working directory should be accepted"),
+            "/tmp"
+        );
+    }
+
+    #[test]
+    fn rejects_relative_working_directory() {
+        assert!(models_working_directory_from(Some("tmp".into())).is_err());
+    }
+
+    #[test]
+    fn accepts_bounded_remote_timeout() {
+        assert_eq!(
+            models_timeout_from(Some("30".into())).expect("timeout should be accepted"),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            models_timeout_from(None).expect("default timeout should be accepted"),
+            MODELS_TIMEOUT
+        );
+        assert!(models_timeout_from(Some("0".into())).is_err());
+        assert!(
+            models_timeout_from(Some((MAX_MODELS_TIMEOUT_SECONDS + 1).to_string().into())).is_err()
+        );
+    }
 }
 
 fn build_mcp_servers(config: &Config) -> Vec<McpServer> {

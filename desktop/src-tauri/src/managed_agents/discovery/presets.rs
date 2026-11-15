@@ -25,9 +25,16 @@ pub(super) struct PresetHarness {
 
 fn preset_definition_env(def: &PresetHarness) -> BTreeMap<String, String> {
     if def.id == "hermes" {
-        [("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string())]
-            .into_iter()
-            .collect()
+        [
+            ("BUZZ_ACP_PUBLISH_OUTPUT".to_string(), "true".to_string()),
+            ("BUZZ_ACP_MODELS_CWD".to_string(), "/tmp".to_string()),
+            (
+                "BUZZ_ACP_MODELS_TIMEOUT_SECONDS".to_string(),
+                "30".to_string(),
+            ),
+        ]
+        .into_iter()
+        .collect()
     } else {
         BTreeMap::new()
     }
@@ -498,6 +505,20 @@ mod tests {
                 .map(String::as_str),
             Some("true")
         );
+        assert_eq!(
+            entry
+                .definition_env
+                .get("BUZZ_ACP_MODELS_CWD")
+                .map(String::as_str),
+            Some("/tmp")
+        );
+        assert_eq!(
+            entry
+                .definition_env
+                .get("BUZZ_ACP_MODELS_TIMEOUT_SECONDS")
+                .map(String::as_str),
+            Some("30")
+        );
 
         warm_harness_registry_from_dir(None);
         let spawn_definition = lookup_loaded_harness_by_id("hermes")
@@ -508,6 +529,20 @@ mod tests {
                 .get("BUZZ_ACP_PUBLISH_OUTPUT")
                 .map(String::as_str),
             Some("true")
+        );
+        assert_eq!(
+            spawn_definition
+                .env
+                .get("BUZZ_ACP_MODELS_CWD")
+                .map(String::as_str),
+            Some("/tmp")
+        );
+        assert_eq!(
+            spawn_definition
+                .env
+                .get("BUZZ_ACP_MODELS_TIMEOUT_SECONDS")
+                .map(String::as_str),
+            Some("30")
         );
 
         let devin = PRESET_HARNESSES
